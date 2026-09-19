@@ -919,20 +919,24 @@ class _SurveyPageState extends State<SurveyPage> {
     );
   }
 
-  /// 8. Floating Action Button (Tambah Survey)
+/// 8. Floating Action Button (Tambah Survey)
   Widget _buildFloatingActionButton() {
-    return FloatingActionButton.extended(
-      onPressed: _handleAddSurvey,
-      backgroundColor: _SurveyTheme.primary,
-      foregroundColor: Colors.white,
-      elevation: 4,
-      icon: const Icon(Icons.add_rounded, size: 22),
-      label: Text(
-        'Tambah Survey',
-        style: GoogleFonts.plusJakartaSans(
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
+    return Padding(
+      // Sesuaikan nilai 80.0 dengan tinggi Bottom Navigation Bar Anda
+      padding: const EdgeInsets.only(bottom: 80.0), 
+      child: FloatingActionButton.extended(
+        onPressed: _handleAddSurvey,
+        backgroundColor: _SurveyTheme.primary,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        icon: const Icon(Icons.add_rounded, size: 22),
+        label: Text(
+          'Tambah Survey',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
         ),
       ),
     );

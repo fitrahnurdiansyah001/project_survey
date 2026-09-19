@@ -569,8 +569,8 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
       }
 
       final response = await http
-          .delete(
-            Uri.parse('$_baseUrl/${widget.surveyId}'),
+          .post(
+            Uri.parse('https://sijala.biz.id/api/v1/surveys/${widget.surveyId}/delete'),
             headers: {
               'Accept': 'application/json',
               'Authorization': 'Bearer $token',
