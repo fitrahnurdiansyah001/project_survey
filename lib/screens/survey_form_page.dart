@@ -14,29 +14,28 @@ import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Design Palette & Constants for Survey Form Page (Consistent with App Design System)
+/// Design Palette & Constants tersinkronisasi dengan tema Dashboard Baru
 abstract class _SurveyFormTheme {
-  static const Color primary = Color(0xFF1E40AF); // Professional Royal Blue
-  static const Color background = Color(0xFFF8FAFC); // Clean Slate-50
+  static const Color primary = Color(0xFF4776E6); // Biru Modern
+  static const Color secondary = Color(0xFF8E54E9); // Ungu Modern
+  static const Color background = Color(0xFFF0F4F8); // Background Adem
   static const Color surface = Colors.white;
-  static const Color textPrimary = Color(0xFF0F172A); // Slate-900
-  static const Color textSecondary = Color(0xFF64748B); // Slate-500
-  static const Color textMuted = Color(0xFF94A3B8); // Slate-400
-  static const Color border = Color(0xFFE2E8F0); // Slate-200
-  static const Color borderFocused = Color(0xFF2563EB); // Blue-600
-  static const Color error = Color(0xFFEF4444); // Red-500
-  static const Color errorBg = Color(0xFFFEF2F2); // Red-50
-  static const Color success = Color(0xFF10B981); // Emerald-500
+  static const Color textPrimary = Color(0xFF2D3748); // Dark Gray
+  static const Color textSecondary = Color(0xFF718096); // Light Gray
+  static const Color textMuted = Color(0xFFA0AEC0);
+  static const Color border = Color(0xFFE2E8F0);
+  static const Color error = Color(0xFFE53E3E);
+  static const Color errorBg = Color(0xFFFFF5F5);
+  static const Color success = Color(0xFF38A169);
 
   static const double mobileBreakpoint = 600.0;
   static const double desktopBreakpoint = 1024.0;
   static const double maxContentWidth = 840.0;
 
-  static const double cardRadius = 18.0;
-  static const double inputRadius = 14.0;
-  static const double buttonRadius = 14.0;
+  static const double cardRadius = 24.0;
+  static const double inputRadius = 16.0;
+  static const double buttonRadius = 16.0;
 
-  /// Responsive page padding
   static EdgeInsets getPagePadding(double screenWidth) {
     if (screenWidth >= desktopBreakpoint) {
       return const EdgeInsets.symmetric(horizontal: 32, vertical: 24);
@@ -48,7 +47,6 @@ abstract class _SurveyFormTheme {
   }
 }
 
-/// Category Data Model
 class SurveyCategory {
   final int id;
   final String name;
@@ -75,40 +73,31 @@ class SurveyFormPage extends StatefulWidget {
 class _SurveyFormPageState extends State<SurveyFormPage> {
   final _formKey = GlobalKey<FormState>();
 
-  // =========================================================
   // API CONSTANTS
-  // =========================================================
-
   static const String _baseUrl = 'https://sijala.biz.id/api/v1';
   static const String _saveEndpoint = '$_baseUrl/surveys/save';
   static const String _categoriesEndpoint = '$_baseUrl/categories';
   static const String _imageEndpoint = 'https://sijala.biz.id/api/image';
 
-  // Default coordinate center (Tasikmalaya, Jawa Barat)
+  // Default coordinate center (Tasikmalaya)
   static const LatLng _defaultLocation = LatLng(-7.3274, 108.2207);
 
-  // =========================================================
   // FORM CONTROLLERS
-  // =========================================================
-
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _latitudeController;
   late final TextEditingController _longitudeController;
+  late final TextEditingController _searchLocationController;
   late final MapController _mapController;
 
-  // =========================================================
   // STATE
-  // =========================================================
-
   bool get isEdit => widget.survey != null;
-
   int? _selectedCategoryId;
   List<SurveyCategory> _categories = [];
   bool _isLoadingCategories = true;
   String? _categoryError;
-
   bool _isSubmitting = false;
+  bool _isSearchingLocation = false;
 
   // Image Picking
   XFile? _selectedImage;
@@ -119,14 +108,9 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
   // Map Location
   LatLng? _selectedLocation;
 
-  // =========================================================
-  // INIT & DISPOSE
-  // =========================================================
-
   @override
   void initState() {
     super.initState();
-
     final survey = widget.survey;
 
     _titleController = TextEditingController(text: survey?.title ?? '');
@@ -139,6 +123,7 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     _longitudeController = TextEditingController(
       text: survey?.longitude != null ? survey!.longitude.toString() : '',
     );
+    _searchLocationController = TextEditingController();
     _mapController = MapController();
 
     if (survey != null && survey.categoryId > 0) {
@@ -151,7 +136,9 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
 
     _existingPhoto = survey?.photo;
     if (_existingPhoto != null && _existingPhoto!.trim().isNotEmpty) {
-      _existingPhotoImageFuture = _fetchExistingSurveyImage(_existingPhoto!.trim());
+      _existingPhotoImageFuture = _fetchExistingSurveyImage(
+        _existingPhoto!.trim(),
+      );
     }
 
     _latitudeController.addListener(_onCoordinateInputChanged);
@@ -164,13 +151,63 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
   void dispose() {
     _latitudeController.removeListener(_onCoordinateInputChanged);
     _longitudeController.removeListener(_onCoordinateInputChanged);
-
     _titleController.dispose();
     _descriptionController.dispose();
     _latitudeController.dispose();
     _longitudeController.dispose();
+    _searchLocationController.dispose();
     _mapController.dispose();
     super.dispose();
+  }
+
+  // =========================================================
+  // LOGIKA PENCARIAN LOKASI
+  // =========================================================
+  Future<void> _searchLocationAPI() async {
+    final query = _searchLocationController.text.trim();
+    if (query.isEmpty) return;
+
+    setState(() => _isSearchingLocation = true);
+
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1',
+      );
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List data = jsonDecode(response.body);
+        if (data.isNotEmpty) {
+          final lat = double.parse(data[0]['lat']);
+          final lon = double.parse(data[0]['lon']);
+          final newLocation = LatLng(lat, lon);
+
+          setState(() {
+            _selectedLocation = newLocation;
+            _latitudeController.text = lat.toStringAsFixed(7);
+            _longitudeController.text = lon.toStringAsFixed(7);
+          });
+
+          _mapController.move(newLocation, 16.0);
+          _showModernSnackBar(
+            message: 'Lokasi berhasil ditemukan!',
+            isSuccess: true,
+          );
+        } else {
+          _showModernSnackBar(
+            message: 'Lokasi "$query" tidak ditemukan.',
+            isSuccess: false,
+          );
+        }
+      }
+    } catch (e) {
+      _showModernSnackBar(
+        message: 'Gagal mencari lokasi. Periksa koneksi internet.',
+        isSuccess: false,
+      );
+    } finally {
+      if (mounted) setState(() => _isSearchingLocation = false);
+    }
   }
 
   void _onCoordinateInputChanged() {
@@ -184,6 +221,7 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
         setState(() {
           _selectedLocation = newPoint;
         });
+        _mapController.move(newPoint, _mapController.camera.zoom);
       }
     }
   }
@@ -193,9 +231,8 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
   }
 
   // =========================================================
-  // FETCH CATEGORIES API
+  // FETCH KATEGORI & IMAGE
   // =========================================================
-
   Future<void> _fetchCategories() async {
     setState(() {
       _isLoadingCategories = true;
@@ -228,13 +265,10 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                     SurveyCategory.fromJson(Map<String, dynamic>.from(item)),
               )
               .toList();
-
           if (!mounted) return;
           setState(() {
             _categories = categoriesList;
             _isLoadingCategories = false;
-
-            // Pastikan kategori yang dipilih saat mode Edit tersedia
             if (isEdit && widget.survey != null) {
               final exists = _categories.any(
                 (c) => c.id == widget.survey!.categoryId,
@@ -242,7 +276,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
               if (exists) {
                 _selectedCategoryId = widget.survey!.categoryId;
               } else if (widget.survey!.categoryId > 0) {
-                // Tambahkan kategori fallback jika belum ada di list
                 _categories.insert(
                   0,
                   SurveyCategory(
@@ -259,7 +292,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           return;
         }
       }
-
       throw Exception('Gagal memuat kategori survey.');
     } catch (e) {
       if (!mounted) return;
@@ -270,10 +302,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     }
   }
 
-  // =========================================================
-  // IMAGE HANDLING
-  // =========================================================
-
   Future<void> _pickImage(ImageSource source) async {
     try {
       final picker = ImagePicker();
@@ -283,7 +311,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
         maxHeight: 1200,
         imageQuality: 85,
       );
-
       if (pickedFile != null) {
         final bytes = await pickedFile.readAsBytes();
         if (!mounted) return;
@@ -293,11 +320,7 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
         });
       }
     } catch (e) {
-      if (!mounted) return;
-      _showModernSnackBar(
-        message: 'Gagal mengambil gambar. Pastikan izin akses telah diberikan.',
-        isSuccess: false,
-      );
+      _showModernSnackBar(message: 'Gagal mengambil gambar.', isSuccess: false);
     }
   }
 
@@ -312,43 +335,29 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
-
-      final Uri uri;
-      if (fileName.startsWith('http://') || fileName.startsWith('https://')) {
-        uri = Uri.parse(fileName);
-      } else {
-        uri = Uri.parse('$_imageEndpoint/$fileName');
-      }
-
-      final response = await http.get(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+      final uri =
+          (fileName.startsWith('http://') || fileName.startsWith('https://'))
+          ? Uri.parse(fileName)
+          : Uri.parse('$_imageEndpoint/$fileName');
+      final response = await http
+          .get(uri, headers: {'Authorization': 'Bearer $token'})
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty)
         return response.bodyBytes;
-      }
-      return null;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('EXISTING IMAGE FETCH ERROR: $e');
-      }
       return null;
     }
+    return null;
   }
 
   // =========================================================
-  // SUBMIT HANDLER (SAVE SURVEY API)
+  // SUBMIT API
   // =========================================================
-
   Future<void> _handleSubmit() async {
     if (_isSubmitting) return;
-
-    // 1. Validasi Form
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate() ||
+        _selectedCategoryId == null ||
+        _selectedCategoryId == 0) {
       _showModernSnackBar(
         message: 'Silakan lengkapi formulir dengan benar.',
         isSuccess: false,
@@ -356,58 +365,31 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
       return;
     }
 
-    // 2. Validasi Kategori
-    if (_selectedCategoryId == null || _selectedCategoryId == 0) {
-      _showModernSnackBar(
-        message: 'Kategori survey wajib dipilih.',
-        isSuccess: false,
-      );
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-    });
+    setState(() => _isSubmitting = true);
 
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
 
-      if (token == null || token.trim().isEmpty) {
-        await _handleUnauthorized(prefs);
-        return;
-      }
-
-      // 3. Bangun Multipart Request
-      // Catatan: Menggunakan POST dengan '_method: PUT' untuk mode Edit
-      // agar kompatibel dengan multipart upload di Laravel / PHP.
       final uri = Uri.parse(_saveEndpoint);
       final request = http.MultipartRequest('POST', uri);
-
       request.headers['Accept'] = 'application/json';
       request.headers['Authorization'] = 'Bearer $token';
 
-      // 4. Fields
       request.fields['title'] = _titleController.text.trim();
       request.fields['category_id'] = _selectedCategoryId.toString();
       request.fields['description'] = _descriptionController.text.trim();
 
       final latStr = _latitudeController.text.trim();
       final lngStr = _longitudeController.text.trim();
-
-      if (latStr.isNotEmpty) {
-        request.fields['latitude'] = latStr;
-      }
-      if (lngStr.isNotEmpty) {
-        request.fields['longitude'] = lngStr;
-      }
+      if (latStr.isNotEmpty) request.fields['latitude'] = latStr;
+      if (lngStr.isNotEmpty) request.fields['longitude'] = lngStr;
 
       if (isEdit) {
         request.fields['id'] = widget.survey!.id.toString();
         request.fields['_method'] = 'PUT';
       }
 
-      // 5. Lampirkan File Foto jika ada foto baru
       if (_selectedImage != null && _selectedImageBytes != null) {
         request.files.add(
           http.MultipartFile.fromBytes(
@@ -418,141 +400,37 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
         );
       }
 
-      if (kDebugMode) {
-        debugPrint('========== SUBMIT SURVEY ==========');
-        debugPrint('Mode: ${isEdit ? "EDIT" : "TAMBAH"}');
-        debugPrint('URL: $uri');
-        debugPrint('Fields: ${request.fields}');
-        debugPrint('Has Photo: ${_selectedImageBytes != null}');
-        debugPrint('===================================');
-      }
-
-      // 6. Kirim Request
       final streamedResponse = await request.send().timeout(
         const Duration(seconds: 25),
       );
       final response = await http.Response.fromStream(streamedResponse);
 
-      if (kDebugMode) {
-        debugPrint('Submit Response Code: ${response.statusCode}');
-        debugPrint('Submit Response Body: ${response.body}');
-      }
-
-      // 7. Handle Response Status
       if (response.statusCode == 200 || response.statusCode == 201) {
-        dynamic decoded;
-        try {
-          decoded = jsonDecode(response.body);
-        } catch (_) {}
-
-        if (decoded is Map && decoded['status'] == false) {
-          throw Exception(decoded['message'] ?? 'Gagal menyimpan data survey.');
-        }
-
-        if (!mounted) return;
-
-        final successMessage = isEdit
-            ? 'Survey berhasil diperbarui.'
-            : 'Survey berhasil ditambahkan.';
-
         _showModernSnackBar(
-          message: successMessage,
+          message: isEdit
+              ? 'Survey berhasil diperbarui.'
+              : 'Survey berhasil ditambahkan.',
           isSuccess: true,
         );
 
-        // Kembali ke halaman sebelumnya dengan mengembalikan true (trigger refresh)
-        context.pop(true);
+        // Perbaikan navigasi kembali setelah berhasil submit
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context, true);
+        } else {
+          context.go(AppRoutes.dashboard);
+        }
         return;
       }
-
-      // 8. Handle Status 422 (Validasi Server Gagal)
-      if (response.statusCode == 422) {
-        dynamic errDecoded;
-        try {
-          errDecoded = jsonDecode(response.body);
-        } catch (_) {}
-
-        String errorText = '';
-        if (errDecoded is Map && errDecoded['errors'] is Map) {
-          final errorsMap = errDecoded['errors'] as Map;
-          for (var key in errorsMap.keys) {
-            final val = errorsMap[key];
-            if (val is List) {
-              for (var msg in val) {
-                errorText += '$msg\n';
-              }
-            } else if (val != null) {
-              errorText += '$val\n';
-            }
-          }
-        }
-
-        if (errorText.trim().isEmpty) {
-          errorText =
-              errDecoded is Map && errDecoded['message'] != null
-                  ? errDecoded['message'].toString()
-                  : 'Data yang dikirim tidak valid (422).';
-        }
-
-        throw Exception(errorText.trim());
-      }
-
-      // 9. Handle Status 401 (Session Expired)
-      if (response.statusCode == 401) {
-        if (!mounted) return;
-        await _handleUnauthorized(prefs);
-        return;
-      }
-
-      // 10. Handle Status 403, 404, 500+
-      if (response.statusCode == 403) {
-        throw Exception('Anda tidak memiliki hak akses untuk menyimpan survey.');
-      }
-      if (response.statusCode == 404) {
-        throw Exception('Layanan penyimpanan survey tidak ditemukan (404).');
-      }
-      if (response.statusCode >= 500) {
-        throw Exception('Terjadi masalah pada server. Silakan coba lagi nanti.');
-      }
-
-      throw Exception(
-        'Gagal menyimpan survey (Kode HTTP: ${response.statusCode}).',
-      );
-    } on TimeoutException {
-      if (!mounted) return;
+      throw Exception('Gagal menyimpan survey (Error ${response.statusCode})');
+    } catch (e) {
       _showModernSnackBar(
-        message: 'Koneksi waktu habis. Silakan periksa koneksi internet Anda.',
+        message: e.toString().replaceFirst('Exception: ', ''),
         isSuccess: false,
       );
-    } catch (e) {
-      if (!mounted) return;
-      final rawMsg = e.toString().replaceFirst('Exception: ', '');
-      _showModernSnackBar(message: rawMsg, isSuccess: false);
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
-
-  /// Handle Unauthorized
-  Future<void> _handleUnauthorized(SharedPreferences prefs) async {
-    await prefs.remove('token');
-    await prefs.remove('user');
-
-    if (!mounted) return;
-    _showModernSnackBar(
-      message: 'Sesi telah berakhir. Silakan login kembali.',
-      isSuccess: false,
-    );
-    context.go(AppRoutes.login);
-  }
-
-  // =========================================================
-  // SNACKBAR HELPER
-  // =========================================================
 
   void _showModernSnackBar({required String message, required bool isSuccess}) {
     if (!mounted) return;
@@ -560,12 +438,11 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
-        backgroundColor:
-            isSuccess ? _SurveyFormTheme.success : _SurveyFormTheme.error,
+        backgroundColor: isSuccess
+            ? _SurveyFormTheme.success
+            : _SurveyFormTheme.error,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        duration: const Duration(seconds: 3),
         content: Row(
           children: [
             Icon(
@@ -573,7 +450,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                   ? Icons.check_circle_rounded
                   : Icons.error_outline_rounded,
               color: Colors.white,
-              size: 22,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -581,7 +457,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                 message,
                 style: GoogleFonts.plusJakartaSans(
                   color: Colors.white,
-                  fontSize: 13.5,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -593,237 +468,71 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
   }
 
   // =========================================================
-  // DIALOGS: IMAGE SOURCE & DISCARD
-  // =========================================================
-
-  void _showImageSourceDialog() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: _SurveyFormTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: _SurveyFormTheme.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Pilih Sumber Foto',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: _SurveyFormTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildImageSourceTile(
-                        icon: Icons.photo_library_rounded,
-                        label: 'Galeri Foto',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _pickImage(ImageSource.gallery);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: _buildImageSourceTile(
-                        icon: Icons.camera_alt_rounded,
-                        label: 'Kamera',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _pickImage(ImageSource.camera);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildImageSourceTile({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _SurveyFormTheme.background,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _SurveyFormTheme.border),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Column(
-              children: [
-                Icon(icon, size: 28, color: _SurveyFormTheme.primary),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: _SurveyFormTheme.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // =========================================================
   // UI PRESENTATION LAYER
   // =========================================================
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final pagePadding = _SurveyFormTheme.getPagePadding(screenWidth);
+    final pagePadding = _SurveyFormTheme.getPagePadding(
+      MediaQuery.sizeOf(context).width,
+    );
 
     return Scaffold(
       backgroundColor: _SurveyFormTheme.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: pagePadding,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: _SurveyFormTheme.maxContentWidth,
-                    ),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // 1. Data Survey Card (Judul, Kategori, Deskripsi)
-                          _buildSectionCard(
-                            icon: Icons.assignment_outlined,
-                            title: 'Data Utama Survey',
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildTitleField(),
-                                const SizedBox(height: 16),
-                                _buildCategoryDropdown(),
-                                const SizedBox(height: 16),
-                                _buildDescriptionField(),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-
-                          // 2. Foto Survey Card
-                          _buildSectionCard(
-                            icon: Icons.photo_camera_back_outlined,
-                            title: 'Foto Dokumentasi Survey',
-                            child: _buildPhotoSection(),
-                          ),
-                          const SizedBox(height: 18),
-
-                          // 3. Lokasi Survey Card (Koordinat & Map)
-                          _buildSectionCard(
-                            icon: Icons.location_on_outlined,
-                            title: 'Lokasi Survey',
-                            child: _buildLocationSection(),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // 4. Tombol Submit Action
-                          _buildSubmitButton(),
-                          const SizedBox(height: 32),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 1. Top Minimal Header with Back Button
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        color: _SurveyFormTheme.surface,
-        border: Border(
-          bottom: BorderSide(color: _SurveyFormTheme.border, width: 1),
-        ),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
+      body: Column(
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => context.pop(),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _SurveyFormTheme.background,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _SurveyFormTheme.border),
+          _buildGradientHeader(),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: pagePadding,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: _SurveyFormTheme.maxContentWidth,
                   ),
-                  child: const Icon(
-                    Icons.arrow_back_rounded,
-                    size: 20,
-                    color: _SurveyFormTheme.textPrimary,
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildSectionCard(
+                          icon: Icons.assignment_outlined,
+                          title: 'Informasi Utama',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildTitleField(),
+                              const SizedBox(height: 16),
+                              _buildCategoryDropdown(),
+                              const SizedBox(height: 16),
+                              _buildDescriptionField(),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        _buildSectionCard(
+                          icon: Icons.photo_camera_back_outlined,
+                          title: 'Dokumentasi',
+                          child: _buildPhotoSection(),
+                        ),
+                        const SizedBox(height: 20),
+
+                        _buildSectionCard(
+                          icon: Icons.location_on_outlined,
+                          title: 'Lokasi Survey',
+                          child: _buildLocationSection(),
+                        ),
+                        const SizedBox(height: 32),
+
+                        _buildSubmitButton(),
+                        const SizedBox(height: 40),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          Text(
-            isEdit ? 'Edit Survey' : 'Tambah Survey',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: _SurveyFormTheme.textPrimary,
-              letterSpacing: -0.3,
             ),
           ),
         ],
@@ -831,26 +540,93 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     );
   }
 
-  /// Reusable Card Wrapper
+  /// 1. Header Gradient bergaya Dashboard (Tombol Kembali Diperbaiki)
+  Widget _buildGradientHeader() {
+    return Container(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 16,
+        bottom: 24,
+        left: 16,
+        right: 16,
+      ),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [_SurveyFormTheme.primary, _SurveyFormTheme.secondary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            // PERBAIKAN TOMBOL KEMBALI
+            onPressed: () {
+              if (Navigator.canPop(context)) {
+                Navigator.of(context).pop();
+              } else {
+                context.go(AppRoutes.dashboard);
+              }
+            },
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withOpacity(0.2),
+              padding: const EdgeInsets.all(12),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isEdit ? 'Edit Survey' : 'Tambah Survey Baru',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  isEdit
+                      ? 'Perbarui data survey yang sudah ada'
+                      : 'Lengkapi formulir di bawah ini',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 2. Reusable Card Wrapper
   Widget _buildSectionCard({
     required IconData icon,
     required String title,
     required Widget child,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: _SurveyFormTheme.surface,
         borderRadius: BorderRadius.circular(_SurveyFormTheme.cardRadius),
-        border: Border.all(
-          color: _SurveyFormTheme.border.withValues(alpha: 0.8),
-          width: 1,
-        ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -860,39 +636,37 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           Row(
             children: [
               Container(
-                width: 32,
-                height: 32,
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _SurveyFormTheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
+                  color: _SurveyFormTheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, size: 18, color: _SurveyFormTheme.primary),
+                child: Icon(icon, size: 20, color: _SurveyFormTheme.primary),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Text(
                 title,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
                   color: _SurveyFormTheme.textPrimary,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           child,
         ],
       ),
     );
   }
 
-  /// Field 1: Judul Survey
   Widget _buildTitleField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildFieldLabel(label: 'Judul Survey', isRequired: true),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         TextFormField(
           controller: _titleController,
           style: GoogleFonts.plusJakartaSans(
@@ -901,139 +675,65 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
             color: _SurveyFormTheme.textPrimary,
           ),
           decoration: _buildInputDecoration(
-            hintText: 'Contoh: Jalan Berlubang di Sukamaju',
+            hintText: 'Contoh: Jalan Berlubang',
             prefixIcon: Icons.title_rounded,
           ),
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Judul survey wajib diisi.';
-            }
-            if (value.trim().length > 255) {
-              return 'Judul survey maksimal 255 karakter.';
-            }
-            return null;
-          },
+          validator: (v) => (v == null || v.trim().isEmpty)
+              ? 'Judul survey wajib diisi.'
+              : null,
         ),
       ],
     );
   }
 
-  /// Field 2: Kategori Dropdown
   Widget _buildCategoryDropdown() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildFieldLabel(label: 'Kategori Survey', isRequired: true),
-        const SizedBox(height: 6),
-        if (_isLoadingCategories)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: _SurveyFormTheme.background,
-              borderRadius: BorderRadius.circular(_SurveyFormTheme.inputRadius),
-              border: Border.all(color: _SurveyFormTheme.border),
-            ),
-            child: Row(
-              children: [
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      _SurveyFormTheme.primary,
-                    ),
-                  ),
+        const SizedBox(height: 8),
+        _isLoadingCategories
+            ? const Center(child: CircularProgressIndicator())
+            : DropdownButtonFormField<int>(
+                value: _selectedCategoryId,
+                isExpanded: true,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _SurveyFormTheme.textPrimary,
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  'Memuat kategori...',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    color: _SurveyFormTheme.textSecondary,
-                  ),
+                decoration: _buildInputDecoration(
+                  hintText: 'Pilih Kategori',
+                  prefixIcon: Icons.category_outlined,
                 ),
-              ],
-            ),
-          )
-        else if (_categoryError != null)
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _categoryError!,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    color: _SurveyFormTheme.error,
-                  ),
-                ),
+                items: _categories
+                    .map(
+                      (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
+                    )
+                    .toList(),
+                onChanged: (val) => setState(() => _selectedCategoryId = val),
+                validator: (v) =>
+                    (v == null || v == 0) ? 'Kategori wajib dipilih.' : null,
               ),
-              TextButton.icon(
-                onPressed: _fetchCategories,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Coba Lagi'),
-              ),
-            ],
-          )
-        else
-          DropdownButtonFormField<int>(
-            initialValue: _selectedCategoryId,
-            isExpanded: true,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: _SurveyFormTheme.textPrimary,
-            ),
-            icon: const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: _SurveyFormTheme.textSecondary,
-            ),
-            decoration: _buildInputDecoration(
-              hintText: 'Pilih Kategori Survey',
-              prefixIcon: Icons.category_outlined,
-            ),
-            items: _categories.map((cat) {
-              return DropdownMenuItem<int>(
-                value: cat.id,
-                child: Text(cat.name),
-              );
-            }).toList(),
-            onChanged: (val) {
-              setState(() {
-                _selectedCategoryId = val;
-              });
-            },
-            validator: (value) {
-              if (value == null || value == 0) {
-                return 'Kategori survey wajib dipilih.';
-              }
-              return null;
-            },
-          ),
       ],
     );
   }
 
-  /// Field 3: Deskripsi Survey
   Widget _buildDescriptionField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildFieldLabel(label: 'Deskripsi Survey', isRequired: false),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         TextFormField(
           controller: _descriptionController,
-          minLines: 3,
-          maxLines: 6,
+          maxLines: 4,
           style: GoogleFonts.plusJakartaSans(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w400,
+            fontSize: 14,
             color: _SurveyFormTheme.textPrimary,
-            height: 1.4,
           ),
           decoration: _buildInputDecoration(
-            hintText: 'Tuliskan rincian hasil observasi atau kondisi lokasi...',
-            prefixIcon: Icons.notes_rounded,
+            hintText: 'Rincian lokasi...',
             alignLabelWithHint: true,
           ),
         ),
@@ -1041,24 +741,18 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     );
   }
 
-  /// Field 4: Foto Survey Section
+  /// 3. Dokumentasi Foto
   Widget _buildPhotoSection() {
-    // 1. Gambar Baru Dipilih
     if (_selectedImageBytes != null) {
       return Column(
         children: [
-          Container(
-            height: 220,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _SurveyFormTheme.border),
-            ),
-            clipBehavior: Clip.antiAlias,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
             child: Image.memory(
               _selectedImageBytes!,
-              fit: BoxFit.cover,
+              height: 200,
               width: double.infinity,
+              fit: BoxFit.cover,
             ),
           ),
           const SizedBox(height: 12),
@@ -1066,229 +760,123 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _showImageSourceDialog,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: _SurveyFormTheme.border),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.photo_library_rounded,
-                    size: 16,
-                    color: _SurveyFormTheme.primary,
-                  ),
-                  label: Text(
-                    'Ganti Foto',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _SurveyFormTheme.primary,
-                    ),
-                  ),
+                  onPressed: () => _pickImage(ImageSource.gallery),
+                  icon: const Icon(Icons.edit, size: 16),
+                  label: const Text('Ganti'),
                 ),
               ),
               const SizedBox(width: 12),
               OutlinedButton.icon(
                 onPressed: _removeSelectedImage,
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: _SurveyFormTheme.errorBg),
-                  backgroundColor: _SurveyFormTheme.errorBg,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  foregroundColor: _SurveyFormTheme.error,
                 ),
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  size: 16,
-                  color: _SurveyFormTheme.error,
-                ),
-                label: Text(
-                  'Hapus',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: _SurveyFormTheme.error,
-                  ),
-                ),
+                icon: const Icon(Icons.delete, size: 16),
+                label: const Text('Hapus'),
               ),
             ],
           ),
         ],
       );
     }
-
-    // 2. Foto Existing pada Mode Edit
-    if (isEdit &&
-        _existingPhoto != null &&
-        _existingPhoto!.isNotEmpty &&
-        _existingPhotoImageFuture != null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          FutureBuilder<Uint8List?>(
-            future: _existingPhotoImageFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Container(
-                  height: 180,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: _SurveyFormTheme.background,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _SurveyFormTheme.border),
-                  ),
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        _SurveyFormTheme.primary,
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              if (snapshot.hasData && snapshot.data != null) {
-                return Container(
-                  height: 220,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _SurveyFormTheme.border),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.memory(
-                    snapshot.data!,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                  ),
-                );
-              }
-
-              return _buildEmptyPhotoUploadBox();
-            },
+    return InkWell(
+      onTap: () => _pickImage(ImageSource.camera),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        decoration: BoxDecoration(
+          color: _SurveyFormTheme.background,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _SurveyFormTheme.border,
+            style: BorderStyle.solid,
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _showImageSourceDialog,
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: _SurveyFormTheme.border),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              icon: const Icon(
-                Icons.add_photo_alternate_outlined,
-                size: 16,
+        ),
+        child: Center(
+          child: Column(
+            children: [
+              const Icon(
+                Icons.add_a_photo_rounded,
+                size: 48,
                 color: _SurveyFormTheme.primary,
               ),
-              label: Text(
-                'Ganti dengan Foto Baru',
+              const SizedBox(height: 12),
+              Text(
+                'Ketuk untuk Ambil Foto',
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _SurveyFormTheme.primary,
+                  fontWeight: FontWeight.bold,
+                  color: _SurveyFormTheme.textPrimary,
                 ),
               ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    // 3. Belum Ada Foto (Upload Box)
-    return _buildEmptyPhotoUploadBox();
-  }
-
-  Widget _buildEmptyPhotoUploadBox() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: _SurveyFormTheme.background,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: _SurveyFormTheme.border,
-          style: BorderStyle.solid,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: _showImageSourceDialog,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
-            child: Column(
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: _SurveyFormTheme.primary.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.add_a_photo_outlined,
-                    size: 24,
-                    color: _SurveyFormTheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Unggah Foto Survey',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _SurveyFormTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Ketuk untuk memilih dari galeri atau kamera',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    color: _SurveyFormTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  /// Field 5: Lokasi Survey & Interactive Map Picker
+  /// 4. Lokasi Survey + Peta Diperbaiki (Optimized anti-lag)
   Widget _buildLocationSection() {
     final lat = double.tryParse(_latitudeController.text.trim());
     final lng = double.tryParse(_longitudeController.text.trim());
-    final bool hasValidCoords =
-        lat != null && lng != null && _isValidCoordinate(lat, lng);
-
-    final LatLng centerPoint =
-        hasValidCoords ? LatLng(lat, lng) : (_selectedLocation ?? _defaultLocation);
+    final centerPoint = (lat != null && lng != null)
+        ? LatLng(lat, lng)
+        : (_selectedLocation ?? _defaultLocation);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Map Container
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _searchLocationController,
+                decoration:
+                    _buildInputDecoration(
+                      hintText: 'Cari nama jalan atau tempat...',
+                      prefixIcon: Icons.search_rounded,
+                    ).copyWith(
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                onSubmitted: (_) => _searchLocationAPI(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: _SurveyFormTheme.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: IconButton(
+                icon: _isSearchingLocation
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.my_location_rounded,
+                        color: Colors.white,
+                      ),
+                onPressed: _searchLocationAPI,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // MAP CONTAINER DIPERBARUI
         Container(
-          height: 240,
-          width: double.infinity,
+          height: 250,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: _SurveyFormTheme.border),
           ),
           clipBehavior: Clip.antiAlias,
+          // Menggunakan Stack untuk marker statis
           child: Stack(
             children: [
               FlutterMap(
@@ -1296,16 +884,22 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                 options: MapOptions(
                   initialCenter: centerPoint,
                   initialZoom: 15.0,
-                  minZoom: 4.0,
-                  maxZoom: 19.0,
-                  onTap: (tapPosition, point) {
-                    setState(() {
-                      _selectedLocation = point;
-                      _latitudeController.text =
-                          point.latitude.toStringAsFixed(7);
-                      _longitudeController.text =
-                          point.longitude.toStringAsFixed(7);
-                    });
+                  // Mencegah setState dipanggil berulang kali saat map bergerak
+                  onPositionChanged: (position, hasGesture) {},
+                  // Panggil setState HANYA ketika user selesai menggeser peta
+                  onMapEvent: (MapEvent event) {
+                    if (event is MapEventMoveEnd) {
+                      setState(() {
+                        _selectedLocation = event.camera.center;
+                        _latitudeController.text = event.camera.center.latitude
+                            .toStringAsFixed(7);
+                        _longitudeController.text = event
+                            .camera
+                            .center
+                            .longitude
+                            .toStringAsFixed(7);
+                      });
+                    }
                   },
                 ),
                 children: [
@@ -1314,62 +908,18 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.example.flutter_appl_latihan',
                   ),
-                  if (_selectedLocation != null)
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: _selectedLocation!,
-                          width: 44,
-                          height: 44,
-                          alignment: Alignment.topCenter,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: _SurveyFormTheme.primary,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white,
-                                width: 2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _SurveyFormTheme.primary
-                                      .withValues(alpha: 0.35),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.location_on_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                 ],
               ),
-              Positioned(
-                bottom: 10,
-                left: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'Ketuk peta untuk menentukan titik koordinat',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
+              // Marker Statis di Tengah Layar (Sangat Ringan)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    bottom: 40.0,
+                  ), // Padding agar ujung bawah pin pas di tengah (center coordinate)
+                  child: Icon(
+                    Icons.location_on,
+                    color: _SurveyFormTheme.error,
+                    size: 42,
                   ),
                 ),
               ),
@@ -1377,79 +927,21 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           ),
         ),
         const SizedBox(height: 16),
-
-        // Latitude & Longitude Inputs
         Row(
           children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildFieldLabel(label: 'Latitude', isRequired: false),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _latitudeController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      signed: true,
-                      decimal: true,
-                    ),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: _SurveyFormTheme.textPrimary,
-                    ),
-                    decoration: _buildInputDecoration(
-                      hintText: '-7.3274000',
-                      prefixIcon: Icons.my_location_rounded,
-                    ),
-                    validator: (val) {
-                      if (val != null && val.trim().isNotEmpty) {
-                        final parsed = double.tryParse(val.trim());
-                        if (parsed == null || parsed < -90.0 || parsed > 90.0) {
-                          return 'Latitude harus antara -90 dan 90';
-                        }
-                      }
-                      return null;
-                    },
-                  ),
-                ],
+              child: TextFormField(
+                controller: _latitudeController,
+                decoration: _buildInputDecoration(hintText: 'Lat'),
+                style: GoogleFonts.plusJakartaSans(fontSize: 13),
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildFieldLabel(label: 'Longitude', isRequired: false),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _longitudeController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      signed: true,
-                      decimal: true,
-                    ),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: _SurveyFormTheme.textPrimary,
-                    ),
-                    decoration: _buildInputDecoration(
-                      hintText: '108.2207000',
-                      prefixIcon: Icons.explore_outlined,
-                    ),
-                    validator: (val) {
-                      if (val != null && val.trim().isNotEmpty) {
-                        final parsed = double.tryParse(val.trim());
-                        if (parsed == null ||
-                            parsed < -180.0 ||
-                            parsed > 180.0) {
-                          return 'Longitude harus antara -180 dan 180';
-                        }
-                      }
-                      return null;
-                    },
-                  ),
-                ],
+              child: TextFormField(
+                controller: _longitudeController,
+                decoration: _buildInputDecoration(hintText: 'Lng'),
+                style: GoogleFonts.plusJakartaSans(fontSize: 13),
               ),
             ),
           ],
@@ -1458,64 +950,46 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     );
   }
 
-  /// 4. Tombol Submit (Simpan Survey)
+  /// 5. Tombol Submit
   Widget _buildSubmitButton() {
-    return SizedBox(
-      height: 52,
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [_SurveyFormTheme.primary, _SurveyFormTheme.secondary],
+        ),
+        borderRadius: BorderRadius.circular(_SurveyFormTheme.buttonRadius),
+        boxShadow: [
+          BoxShadow(
+            color: _SurveyFormTheme.primary.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: ElevatedButton(
         onPressed: _isSubmitting ? null : _handleSubmit,
         style: ElevatedButton.styleFrom(
-          backgroundColor: _SurveyFormTheme.primary,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor:
-              _SurveyFormTheme.primary.withValues(alpha: 0.6),
-          elevation: 0,
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(_SurveyFormTheme.buttonRadius),
           ),
         ),
         child: _isSubmitting
-            ? Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Menyimpan Survey...',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.check_rounded, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    isEdit ? 'Simpan Perubahan' : 'Simpan Survey',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                ],
+            ? const CircularProgressIndicator(color: Colors.white)
+            : Text(
+                isEdit ? 'Simpan Perubahan' : 'Kirim Survey',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
       ),
     );
   }
 
-  /// Label Helper
   Widget _buildFieldLabel({required String label, required bool isRequired}) {
     return Row(
       children: [
@@ -1523,25 +997,16 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           label,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 13,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.bold,
             color: _SurveyFormTheme.textPrimary,
           ),
         ),
-        if (isRequired) ...[
-          const SizedBox(width: 4),
-          const Text(
-            '*',
-            style: TextStyle(
-              color: _SurveyFormTheme.error,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+        if (isRequired)
+          const Text(' *', style: TextStyle(color: _SurveyFormTheme.error)),
       ],
     );
   }
 
-  /// Input Decoration Helper
   InputDecoration _buildInputDecoration({
     required String hintText,
     IconData? prefixIcon,
@@ -1550,40 +1015,27 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     return InputDecoration(
       hintText: hintText,
       hintStyle: GoogleFonts.plusJakartaSans(
-        fontSize: 13,
-        fontWeight: FontWeight.w400,
         color: _SurveyFormTheme.textMuted,
+        fontSize: 13,
       ),
       prefixIcon: prefixIcon != null
-          ? Icon(prefixIcon, size: 18, color: _SurveyFormTheme.textSecondary)
+          ? Icon(prefixIcon, color: _SurveyFormTheme.primary, size: 20)
           : null,
-      alignLabelWithHint: alignLabelWithHint,
       filled: true,
       fillColor: _SurveyFormTheme.background,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(_SurveyFormTheme.inputRadius),
-        borderSide: const BorderSide(color: _SurveyFormTheme.border),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(_SurveyFormTheme.inputRadius),
-        borderSide: const BorderSide(color: _SurveyFormTheme.border),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(_SurveyFormTheme.inputRadius),
         borderSide: const BorderSide(
-          color: _SurveyFormTheme.borderFocused,
-          width: 1.5,
-        ),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(_SurveyFormTheme.inputRadius),
-        borderSide: const BorderSide(color: _SurveyFormTheme.error),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(_SurveyFormTheme.inputRadius),
-        borderSide: const BorderSide(
-          color: _SurveyFormTheme.error,
+          color: _SurveyFormTheme.primary,
           width: 1.5,
         ),
       ),

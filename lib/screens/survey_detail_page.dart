@@ -14,26 +14,30 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Design Palette & Constants for Detail Survey Page
+/// Design Palette & Constants for Detail Survey Page (Diselaraskan dengan Tema Modern)
 abstract class _SurveyDetailTheme {
-  static const Color primary = Color(0xFF1E40AF); // Professional Royal Blue
-  static const Color primaryLight = Color(0xFF3B82F6);
-  static const Color primaryDark = Color(0xFF1E3A8A);
-  static const Color background = Color(0xFFF8FAFC); // Clean Slate-50
+  static const Color primary = Color(0xFF4776E6); // Biru Modern
+  static const Color primaryLight = Color(
+    0xFF4776E6,
+  ); // Biru Modern (Untuk awal gradasi)
+  static const Color primaryDark = Color(
+    0xFF8E54E9,
+  ); // Ungu Modern (Untuk akhir gradasi)
+  static const Color background = Color(0xFFF0F4F8); // Background Adem
   static const Color surface = Colors.white;
-  static const Color textPrimary = Color(0xFF0F172A); // Slate-900
-  static const Color textSecondary = Color(0xFF64748B); // Slate-500
-  static const Color textMuted = Color(0xFF94A3B8); // Slate-400
-  static const Color border = Color(0xFFE2E8F0); // Slate-200
-  static const Color error = Color(0xFFEF4444); // Red-500
-  static const Color errorBg = Color(0xFFFEF2F2); // Red-50
-  static const Color success = Color(0xFF10B981); // Emerald-500
+  static const Color textPrimary = Color(0xFF2D3748); // Dark Gray
+  static const Color textSecondary = Color(0xFF718096); // Light Gray
+  static const Color textMuted = Color(0xFFA0AEC0); // Muted Gray
+  static const Color border = Color(0xFFE2E8F0); // Border Halus
+  static const Color error = Color(0xFFE53E3E); // Red-500
+  static const Color errorBg = Color(0xFFFFF5F5); // Red-50
+  static const Color success = Color(0xFF38A169); // Green-500
 
   static const double mobileBreakpoint = 600.0;
   static const double desktopBreakpoint = 1024.0;
   static const double maxContentWidth = 1150.0;
 
-  static const double cardRadius = 18.0;
+  static const double cardRadius = 20.0; // Sedikit lebih rounded sesuai tema
   static const double badgeRadius = 8.0;
 
   /// Responsive page padding
@@ -134,7 +138,9 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
       final token = prefs.getString('token');
 
       if (kDebugMode) {
-        debugPrint('Token tersedia: ${token != null && token.trim().isNotEmpty}');
+        debugPrint(
+          'Token tersedia: ${token != null && token.trim().isNotEmpty}',
+        );
       }
 
       if (token == null || token.trim().isEmpty) {
@@ -197,10 +203,9 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
         try {
           errDecoded = jsonDecode(response.body);
         } catch (_) {}
-        final String msg =
-            errDecoded is Map && errDecoded['message'] != null
-                ? errDecoded['message'].toString()
-                : 'Permintaan detail survey tidak valid (422).';
+        final String msg = errDecoded is Map && errDecoded['message'] != null
+            ? errDecoded['message'].toString()
+            : 'Permintaan detail survey tidak valid (422).';
         throw Exception(msg);
       }
 
@@ -278,12 +283,14 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
         } else {
           // Status 200 tetapi struktur data tidak dapat diparse
           if (kDebugMode) {
-            debugPrint('ERROR: Gagal mengekstrak Map survey dari response: $decoded');
+            debugPrint(
+              'ERROR: Gagal mengekstrak Map survey dari response: $decoded',
+            );
           }
           final String serverMessage =
               decoded is Map && decoded['message'] != null
-                  ? decoded['message'].toString()
-                  : 'Gagal membaca data detail survey.';
+              ? decoded['message'].toString()
+              : 'Gagal membaca data detail survey.';
           throw Exception(serverMessage);
         }
       }
@@ -420,7 +427,10 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
       builder: (dialogContext) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -469,10 +479,7 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
                     minScale: 0.8,
                     maxScale: 4.0,
                     child: Center(
-                      child: Image.memory(
-                        imageBytes,
-                        fit: BoxFit.contain,
-                      ),
+                      child: Image.memory(imageBytes, fit: BoxFit.contain),
                     ),
                   ),
                 ),
@@ -542,10 +549,7 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
   /// Navigate to Edit Survey Page
   Future<void> _handleEditSurvey() async {
     if (_survey == null) return;
-    final result = await context.push(
-      AppRoutes.editSurvey,
-      extra: _survey,
-    );
+    final result = await context.push(AppRoutes.editSurvey, extra: _survey);
 
     if (result == true && mounted) {
       await _fetchSurveyDetail(isRefresh: true);
@@ -570,7 +574,9 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
 
       final response = await http
           .post(
-            Uri.parse('https://sijala.biz.id/api/v1/surveys/${widget.surveyId}/delete'),
+            Uri.parse(
+              'https://sijala.biz.id/api/v1/surveys/${widget.surveyId}/delete',
+            ),
             headers: {
               'Accept': 'application/json',
               'Authorization': 'Bearer $token',
@@ -660,7 +666,9 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
                   Expanded(
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: _SurveyDetailTheme.border),
+                        side: const BorderSide(
+                          color: _SurveyDetailTheme.border,
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 13),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -718,8 +726,9 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
-        backgroundColor:
-            isSuccess ? _SurveyDetailTheme.success : _SurveyDetailTheme.error,
+        backgroundColor: isSuccess
+            ? _SurveyDetailTheme.success
+            : _SurveyDetailTheme.error,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -841,12 +850,14 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color:
-                              _SurveyDetailTheme.primary.withValues(alpha: 0.08),
+                          color: _SurveyDetailTheme.primary.withValues(
+                            alpha: 0.08,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: _SurveyDetailTheme.primary
-                                .withValues(alpha: 0.18),
+                            color: _SurveyDetailTheme.primary.withValues(
+                              alpha: 0.18,
+                            ),
                           ),
                         ),
                         child: const Icon(
@@ -869,8 +880,9 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
                           color: _SurveyDetailTheme.errorBg,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color:
-                                _SurveyDetailTheme.error.withValues(alpha: 0.2),
+                            color: _SurveyDetailTheme.error.withValues(
+                              alpha: 0.2,
+                            ),
                           ),
                         ),
                         child: const Icon(
@@ -1465,11 +1477,8 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () => _showImagePreviewDialog(
-                        context,
-                        bytes,
-                        survey.title,
-                      ),
+                      onTap: () =>
+                          _showImagePreviewDialog(context, bytes, survey.title),
                     ),
                   ),
                 ),
@@ -1804,15 +1813,13 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
                       TileLayer(
                         urlTemplate:
                             'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.example.flutter_appl_latihan',
+                        userAgentPackageName:
+                            'com.example.flutter_appl_latihan',
                       ),
                       MarkerLayer(
                         markers: [
                           Marker(
-                            point: LatLng(
-                              survey.latitude!,
-                              survey.longitude!,
-                            ),
+                            point: LatLng(survey.latitude!, survey.longitude!),
                             width: 48,
                             height: 48,
                             alignment: Alignment.topCenter,
@@ -1938,10 +1945,8 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
                 ),
                 if (hasCoords)
                   IconButton(
-                    onPressed: () => _copyCoordinates(
-                      survey.latitude!,
-                      survey.longitude!,
-                    ),
+                    onPressed: () =>
+                        _copyCoordinates(survey.latitude!, survey.longitude!),
                     icon: const Icon(
                       Icons.copy_rounded,
                       size: 18,
@@ -1960,10 +1965,8 @@ class _SurveyDetailPageState extends State<SurveyDetailPage> {
               width: double.infinity,
               height: 48,
               child: ElevatedButton.icon(
-                onPressed: () => _openGoogleMaps(
-                  survey.latitude!,
-                  survey.longitude!,
-                ),
+                onPressed: () =>
+                    _openGoogleMaps(survey.latitude!, survey.longitude!),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _SurveyDetailTheme.primary,
                   foregroundColor: Colors.white,

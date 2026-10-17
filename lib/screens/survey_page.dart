@@ -9,26 +9,24 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Design Palette & Constants for Survey Page (Consistent with Login, Register, Profile)
+/// Design Palette & Constants tersinkronisasi dengan tema Dashboard & Form
 abstract class _SurveyTheme {
-  static const Color primary = Color(0xFF1E40AF); // Professional Royal Blue
-  static const Color primaryLight = Color(0xFF3B82F6);
-  static const Color primaryDark = Color(0xFF1E3A8A);
-  static const Color background = Color(0xFFF8FAFC); // Clean Slate-50
+  static const Color primary = Color(0xFF4776E6); // Biru Modern
+  static const Color secondary = Color(0xFF8E54E9); // Ungu Modern
+  static const Color background = Color(0xFFF0F4F8); // Background Adem
   static const Color surface = Colors.white;
-  static const Color textPrimary = Color(0xFF0F172A); // Slate-900
-  static const Color textSecondary = Color(0xFF64748B); // Slate-500
-  static const Color textMuted = Color(0xFF94A3B8); // Slate-400
-  static const Color border = Color(0xFFE2E8F0); // Slate-200
-  static const Color error = Color(0xFFEF4444); // Red-500
-  static const Color errorBg = Color(0xFFFEF2F2); // Red-50
-  static const Color success = Color(0xFF10B981); // Emerald-500
+  static const Color textPrimary = Color(0xFF2D3748); // Dark Gray
+  static const Color textSecondary = Color(0xFF718096); // Light Gray
+  static const Color textMuted = Color(0xFFA0AEC0);
+  static const Color error = Color(0xFFE53E3E);
+  static const Color errorBg = Color(0xFFFFF5F5);
+  static const Color success = Color(0xFF38A169);
 
   static const double mobileBreakpoint = 600.0;
   static const double desktopBreakpoint = 1024.0;
   static const double maxContentWidth = 1150.0;
 
-  static const double cardRadius = 18.0;
+  static const double cardRadius = 20.0;
   static const double badgeRadius = 8.0;
 
   /// Responsive page padding
@@ -54,48 +52,65 @@ class _SurveyPageState extends State<SurveyPage> {
   // =========================================================
   // API CONSTANTS
   // =========================================================
-
   static const String _surveyEndpoint = 'https://sijala.biz.id/api/v1/surveys';
 
   // =========================================================
   // STATE
   // =========================================================
-
   List<Survey> _surveys = [];
+  List<Survey> _filteredSurveys = []; // State untuk menampung hasil pencarian
+
   bool _isLoading = true;
   bool _isFetching = false;
   String? _errorMessage;
 
+  final TextEditingController _searchController = TextEditingController();
+
   // =========================================================
   // INIT & LIFECYCLE
   // =========================================================
-
   @override
   void initState() {
     super.initState();
     _fetchSurveys();
   }
 
-  // =========================================================
-  // FETCH SURVEYS API (Cross-Platform / Web Safe)
-  // =========================================================
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
+  // =========================================================
+  // LOGIKA PENCARIAN (FILTER LOKAL)
+  // =========================================================
+  void _onSearchChanged(String query) {
+    final lowerQuery = query.toLowerCase();
+    setState(() {
+      _filteredSurveys = _surveys.where((survey) {
+        return survey.title.toLowerCase().contains(lowerQuery) ||
+            survey.categoryName.toLowerCase().contains(lowerQuery) ||
+            survey.description.toLowerCase().contains(lowerQuery);
+      }).toList();
+    });
+  }
+
+  // =========================================================
+  // FETCH SURVEYS API
+  // =========================================================
   Future<void> _fetchSurveys({bool isRefresh = false}) async {
-    // Prevent duplicate simultaneous requests
     if (_isFetching) return;
     _isFetching = true;
 
     if (!isRefresh) {
-      if (mounted) {
+      if (mounted)
         setState(() {
           _isLoading = true;
           _errorMessage = null;
         });
-      }
     }
 
     try {
-      // 1. Retrieve token from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
 
@@ -105,7 +120,6 @@ class _SurveyPageState extends State<SurveyPage> {
         return;
       }
 
-      // 2. HTTP GET Request
       final response = await http
           .get(
             Uri.parse(_surveyEndpoint),
@@ -116,55 +130,31 @@ class _SurveyPageState extends State<SurveyPage> {
           )
           .timeout(const Duration(seconds: 15));
 
-      // 3. Handle Status 401 (Session Expired / Unauthorized)
       if (response.statusCode == 401) {
         if (!mounted) return;
         await _handleUnauthorized(prefs);
         return;
       }
 
-      // 4. Handle Status 403 (Forbidden)
-      if (response.statusCode == 403) {
-        throw Exception(
-          'Akses ditolak. Anda tidak memiliki izin untuk melihat daftar survey.',
-        );
-      }
-
-      // 5. Handle Status 404 (Not Found)
-      if (response.statusCode == 404) {
-        throw Exception('Layanan daftar survey tidak ditemukan (404).');
-      }
-
-      // 6. Handle Status 422 (Unprocessable Entity)
-      if (response.statusCode == 422) {
-        throw Exception('Permintaan daftar survey tidak valid (422).');
-      }
-
-      // 7. Handle Server Error (500+)
-      if (response.statusCode >= 500) {
-        throw Exception('Terjadi masalah pada server. Silakan coba lagi nanti.');
-      }
-
-      // 8. Handle Success (200 OK)
       if (response.statusCode == 200) {
         final dynamic decoded = jsonDecode(response.body);
 
-        // Defensive validation of response payload
         if (decoded is Map<String, dynamic> && decoded['status'] == true) {
           final dynamic dataList = decoded['data'];
           final List<Survey> loadedSurveys = [];
 
           if (dataList is List) {
             for (var item in dataList) {
-              if (item is Map<String, dynamic>) {
+              if (item is Map<String, dynamic>)
                 loadedSurveys.add(Survey.fromJson(item));
-              }
             }
           }
 
           if (!mounted) return;
           setState(() {
             _surveys = loadedSurveys;
+            // Terapkan ulang pencarian saat refresh
+            _onSearchChanged(_searchController.text);
             _isLoading = false;
             _errorMessage = null;
           });
@@ -172,13 +162,12 @@ class _SurveyPageState extends State<SurveyPage> {
         } else {
           final String msg =
               decoded is Map<String, dynamic> && decoded['message'] != null
-                  ? decoded['message'].toString()
-                  : 'Gagal memuat daftar survey.';
+              ? decoded['message'].toString()
+              : 'Gagal memuat daftar survey.';
           throw Exception(msg);
         }
       }
 
-      // 9. Fallback for unexpected status codes
       throw Exception('Gagal memuat survey (Kode: ${response.statusCode}).');
     } on TimeoutException {
       if (!mounted) return;
@@ -186,44 +175,21 @@ class _SurveyPageState extends State<SurveyPage> {
         'Koneksi waktu habis. Silakan coba lagi.',
         isRefresh: isRefresh,
       );
-    } on FormatException {
-      if (!mounted) return;
-      _handleFetchError(
-        'Format data dari server tidak valid.',
-        isRefresh: isRefresh,
-      );
     } catch (e) {
       if (!mounted) return;
-      final String rawMsg = e.toString().replaceFirst('Exception: ', '');
-      final String lower = rawMsg.toLowerCase();
-
-      String userMessage = rawMsg;
-      if (lower.contains('socket') ||
-          lower.contains('failed to connect') ||
-          lower.contains('clientexception') ||
-          lower.contains('network') ||
-          lower.contains('xmlhttprequest') ||
-          lower.contains('connection failed')) {
-        userMessage =
-            'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
-      }
-
-      _handleFetchError(userMessage, isRefresh: isRefresh);
+      _handleFetchError(
+        'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.',
+        isRefresh: isRefresh,
+      );
     } finally {
       _isFetching = false;
-      if (mounted && _isLoading) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted && _isLoading) setState(() => _isLoading = false);
     }
   }
 
-  /// Handle 401 Unauthorized securely
   Future<void> _handleUnauthorized(SharedPreferences prefs) async {
     await prefs.remove('token');
     await prefs.remove('user');
-
     if (!mounted) return;
     _showModernSnackBar(
       message: 'Sesi telah berakhir. Silakan login kembali.',
@@ -232,49 +198,26 @@ class _SurveyPageState extends State<SurveyPage> {
     context.go(AppRoutes.login);
   }
 
-  /// Handle fetch error with graceful fallback for pull-to-refresh
   void _handleFetchError(String message, {required bool isRefresh}) {
     setState(() {
       _isLoading = false;
-      // If refreshed but we already have data, preserve the old data and show SnackBar
-      if (!isRefresh || _surveys.isEmpty) {
-        _errorMessage = message;
-      }
+      if (!isRefresh || _surveys.isEmpty) _errorMessage = message;
     });
-
-    if (isRefresh) {
-      _showModernSnackBar(message: message, isSuccess: false);
-    }
+    if (isRefresh) _showModernSnackBar(message: message, isSuccess: false);
   }
 
   // =========================================================
   // NAVIGATION HANDLERS
   // =========================================================
-
-  /// Navigate to Survey Detail Page with auto-refresh on edit/delete
   Future<void> _handleCardTap(Survey survey) async {
-    final result = await context.push(
-      AppRoutes.surveyDetail,
-      extra: survey.id,
-    );
-
-    if (result == true && mounted) {
-      await _fetchSurveys();
-    }
+    final result = await context.push(AppRoutes.surveyDetail, extra: survey.id);
+    if (result == true && mounted) await _fetchSurveys();
   }
 
-  /// Navigate to Add Survey Page with auto-refresh on success
   Future<void> _handleAddSurvey() async {
     final result = await context.push(AppRoutes.addSurvey);
-
-    if (result == true && mounted) {
-      await _fetchSurveys();
-    }
+    if (result == true && mounted) await _fetchSurveys();
   }
-
-  // =========================================================
-  // FEEDBACK / SNACKBAR
-  // =========================================================
 
   void _showModernSnackBar({required String message, required bool isSuccess}) {
     if (!mounted) return;
@@ -285,8 +228,6 @@ class _SurveyPageState extends State<SurveyPage> {
         backgroundColor: isSuccess ? _SurveyTheme.success : _SurveyTheme.error,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        duration: const Duration(seconds: 3),
         content: Row(
           children: [
             Icon(
@@ -294,7 +235,6 @@ class _SurveyPageState extends State<SurveyPage> {
                   ? Icons.check_circle_rounded
                   : Icons.error_outline_rounded,
               color: Colors.white,
-              size: 22,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -302,7 +242,6 @@ class _SurveyPageState extends State<SurveyPage> {
                 message,
                 style: GoogleFonts.plusJakartaSans(
                   color: Colors.white,
-                  fontSize: 13.5,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -316,7 +255,6 @@ class _SurveyPageState extends State<SurveyPage> {
   // =========================================================
   // UI PRESENTATION LAYER
   // =========================================================
-
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -324,90 +262,125 @@ class _SurveyPageState extends State<SurveyPage> {
 
     return Scaffold(
       backgroundColor: _SurveyTheme.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: RefreshIndicator(
-                color: _SurveyTheme.primary,
-                backgroundColor: _SurveyTheme.surface,
-                onRefresh: () => _fetchSurveys(isRefresh: true),
-                child: _buildBodyContent(
-                  screenWidth: screenWidth,
-                  padding: pagePadding,
-                ),
+      body: Column(
+        children: [
+          _buildGradientHeaderWithSearch(),
+          Expanded(
+            child: RefreshIndicator(
+              color: _SurveyTheme.primary,
+              backgroundColor: _SurveyTheme.surface,
+              onRefresh: () => _fetchSurveys(isRefresh: true),
+              child: _buildBodyContent(
+                screenWidth: screenWidth,
+                padding: pagePadding,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
-  /// 1. Top Minimal Modern Header
-  Widget _buildHeader() {
+  /// 1. Header Gradient & Form Pencarian
+  Widget _buildGradientHeaderWithSearch() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 20,
+        bottom: 24,
+        left: 20,
+        right: 20,
+      ),
       decoration: const BoxDecoration(
-        color: _SurveyTheme.surface,
-        border: Border(
-          bottom: BorderSide(color: _SurveyTheme.border, width: 1),
+        gradient: LinearGradient(
+          colors: [_SurveyTheme.primary, _SurveyTheme.secondary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [_SurveyTheme.primaryLight, _SurveyTheme.primaryDark],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: _SurveyTheme.primary.withValues(alpha: 0.22),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
-            child: const Center(
-              child: Icon(
-                Icons.assignment_rounded,
-                color: Colors.white,
-                size: 22,
+                child: const Icon(
+                  Icons.assignment_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
               ),
-            ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Daftar Survey',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'Kelola data hasil survey Anda di sini',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Survey',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: _SurveyTheme.textPrimary,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                Text(
-                  'Daftar hasil survei',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                    color: _SurveyTheme.textSecondary,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 24),
+          // Kolom Pencarian
+          TextField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            style: GoogleFonts.plusJakartaSans(fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Cari judul, deskripsi, atau kategori...',
+              hintStyle: GoogleFonts.plusJakartaSans(
+                color: _SurveyTheme.textMuted,
+              ),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: _SurveyTheme.primary,
+              ),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(
+                        Icons.clear_rounded,
+                        color: _SurveyTheme.textMuted,
+                      ),
+                      onPressed: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 14,
+                horizontal: 16,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
         ],
@@ -420,17 +393,12 @@ class _SurveyPageState extends State<SurveyPage> {
     required double screenWidth,
     required EdgeInsets padding,
   }) {
-    if (_isLoading) {
-      return _buildLoadingState();
-    }
+    if (_isLoading) return _buildLoadingState();
+    if (_errorMessage != null && _surveys.isEmpty) return _buildErrorState();
 
-    if (_errorMessage != null && _surveys.isEmpty) {
-      return _buildErrorState();
-    }
-
-    if (_surveys.isEmpty) {
-      return _buildEmptyState();
-    }
+    // Pengecekan Empty State jika data kosong atau hasil pencarian tidak ditemukan
+    if (_surveys.isEmpty) return _buildEmptyState(isSearchEmpty: false);
+    if (_filteredSurveys.isEmpty) return _buildEmptyState(isSearchEmpty: true);
 
     return Center(
       child: ConstrainedBox(
@@ -445,21 +413,21 @@ class _SurveyPageState extends State<SurveyPage> {
     );
   }
 
-  /// 3. Responsive Survey List / Grid (Robust against overflow)
+  /// 3. Responsive Survey List / Grid
   Widget _buildResponsiveSurveyList({
     required double screenWidth,
     required EdgeInsets padding,
   }) {
-    // Bottom padding so the last item is never hidden behind the FAB
     final contentPadding = padding.copyWith(bottom: padding.bottom + 84);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final double availableWidth = constraints.maxWidth;
 
-        // Desktop Layout (>= 1024px or width >= 900px)
-        if (screenWidth >= _SurveyTheme.desktopBreakpoint || availableWidth >= 900) {
-          if (_surveys.length == 1) {
+        // Desktop / Tablet Layout (Grid)
+        if (screenWidth >= _SurveyTheme.mobileBreakpoint ||
+            availableWidth >= 600) {
+          if (_filteredSurveys.length == 1) {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: contentPadding,
@@ -467,15 +435,13 @@ class _SurveyPageState extends State<SurveyPage> {
                 Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 520),
-                    child: _buildSurveyCard(_surveys.first),
+                    child: _buildSurveyCard(_filteredSurveys.first),
                   ),
                 ),
               ],
             );
           }
-
           final int columns = availableWidth >= 1000 ? 3 : 2;
-
           return GridView.builder(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: contentPadding,
@@ -483,57 +449,22 @@ class _SurveyPageState extends State<SurveyPage> {
               crossAxisCount: columns,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              mainAxisExtent: 205,
+              mainAxisExtent: 195,
             ),
-            itemCount: _surveys.length,
-            itemBuilder: (context, index) {
-              return _buildSurveyCard(_surveys[index]);
-            },
+            itemCount: _filteredSurveys.length,
+            itemBuilder: (context, index) =>
+                _buildSurveyCard(_filteredSurveys[index]),
           );
         }
 
-        // Tablet Layout (600px - 1023px)
-        if (screenWidth >= _SurveyTheme.mobileBreakpoint || availableWidth >= 600) {
-          if (_surveys.length == 1) {
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: contentPadding,
-              children: [
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
-                    child: _buildSurveyCard(_surveys.first),
-                  ),
-                ),
-              ],
-            );
-          }
-
-          return GridView.builder(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: contentPadding,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-              mainAxisExtent: 210,
-            ),
-            itemCount: _surveys.length,
-            itemBuilder: (context, index) {
-              return _buildSurveyCard(_surveys[index]);
-            },
-          );
-        }
-
-        // Mobile Layout (< 600px)
+        // Mobile Layout (List)
         return ListView.separated(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: contentPadding,
-          itemCount: _surveys.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            return _buildSurveyCard(_surveys[index]);
-          },
+          itemCount: _filteredSurveys.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 16),
+          itemBuilder: (context, index) =>
+              _buildSurveyCard(_filteredSurveys[index]),
         );
       },
     );
@@ -545,119 +476,99 @@ class _SurveyPageState extends State<SurveyPage> {
       decoration: BoxDecoration(
         color: _SurveyTheme.surface,
         borderRadius: BorderRadius.circular(_SurveyTheme.cardRadius),
-        border: Border.all(
-          color: _SurveyTheme.border.withValues(alpha: 0.8),
-          width: 1,
-        ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 16,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(_SurveyTheme.cardRadius),
         child: InkWell(
           borderRadius: BorderRadius.circular(_SurveyTheme.cardRadius),
           onTap: () => _handleCardTap(survey),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Top Section: Icon, Title, Badge & Click Indicator
+                // Bagian Atas
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Survey icon
                         Container(
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: _SurveyTheme.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8),
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFE2E8F0), Color(0xFFF8FAFC)],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white, width: 2),
                           ),
                           child: const Icon(
-                            Icons.assignment_outlined,
-                            size: 17,
+                            Icons.assignment_turned_in_rounded,
                             color: _SurveyTheme.primary,
+                            size: 20,
                           ),
                         ),
-                        const SizedBox(width: 10),
-
-                        // Title & Category Badge
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _SurveyTheme.secondary.withOpacity(
+                                    0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  survey.categoryName.toUpperCase(),
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: _SurveyTheme.secondary,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
                               Text(
                                 survey.title,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 15,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.bold,
                                   color: _SurveyTheme.textPrimary,
-                                  height: 1.25,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _SurveyTheme.primary.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                  borderRadius: BorderRadius.circular(
-                                    _SurveyTheme.badgeRadius,
-                                  ),
-                                  border: Border.all(
-                                    color: _SurveyTheme.primary.withValues(
-                                      alpha: 0.16,
-                                    ),
-                                  ),
-                                ),
-                                child: Text(
-                                  survey.categoryName,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: _SurveyTheme.primary,
-                                  ),
+                                  height: 1.2,
                                 ),
                               ),
                             ],
                           ),
                         ),
-
-                        // Subtle Chevron indicator
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          size: 20,
-                          color: _SurveyTheme.textMuted,
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-
-                    // Description text
+                    const SizedBox(height: 8),
                     Text(
                       survey.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
-                        fontWeight: FontWeight.w400,
                         color: _SurveyTheme.textSecondary,
                         height: 1.4,
                       ),
@@ -665,63 +576,40 @@ class _SurveyPageState extends State<SurveyPage> {
                   ],
                 ),
 
-                // Bottom Section: Coordinates & Date
+                // Bagian Bawah
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(height: 8),
-                    Divider(
-                      color: _SurveyTheme.border.withValues(alpha: 0.8),
-                      height: 1,
-                      thickness: 1,
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Coordinates & Date Row
+                    const Divider(height: 20, thickness: 0.5),
                     Row(
                       children: [
-                        // Location info
                         const Icon(
                           Icons.location_on_rounded,
                           size: 14,
-                          color: _SurveyTheme.primaryLight,
+                          color: _SurveyTheme.error,
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          flex: 5,
                           child: Text(
                             survey.formattedCoordinates,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 11,
                               color: _SurveyTheme.textSecondary,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-
-                        // Date info
                         const Icon(
                           Icons.access_time_rounded,
                           size: 13,
                           color: _SurveyTheme.textMuted,
                         ),
                         const SizedBox(width: 4),
-                        Expanded(
-                          flex: 4,
-                          child: Text(
-                            survey.formattedDate,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.end,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: _SurveyTheme.textMuted,
-                            ),
+                        Text(
+                          survey.formattedDate,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            color: _SurveyTheme.textMuted,
                           ),
                         ),
                       ],
@@ -736,79 +624,43 @@ class _SurveyPageState extends State<SurveyPage> {
     );
   }
 
-  /// 5. Modern Loading State Widget
+  /// 5. Loading State
   Widget _buildLoadingState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(
-            width: 36,
-            height: 36,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              valueColor: AlwaysStoppedAnimation<Color>(_SurveyTheme.primary),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Memuat daftar survey...',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: _SurveyTheme.textSecondary,
-            ),
-          ),
-        ],
-      ),
+    return const Center(
+      child: CircularProgressIndicator(color: _SurveyTheme.primary),
     );
   }
 
-  /// 6. Modern Error State Widget
+  /// 6. Error State
   Widget _buildErrorState() {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 60),
+          padding: const EdgeInsets.all(40),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: const BoxDecoration(
-                  color: _SurveyTheme.errorBg,
-                  shape: BoxShape.circle,
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.cloud_off_rounded,
-                    color: _SurveyTheme.error,
-                    size: 32,
-                  ),
-                ),
+              const Icon(
+                Icons.wifi_off_rounded,
+                size: 64,
+                color: _SurveyTheme.error,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Text(
-                'Gagal Memuat Survey',
-                textAlign: TextAlign.center,
+                'Gagal Memuat Data',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 18,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.bold,
                   color: _SurveyTheme.textPrimary,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                _errorMessage ??
-                    'Periksa koneksi internet Anda dan coba lagi.',
+                _errorMessage ?? 'Terjadi kesalahan.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w400,
                   color: _SurveyTheme.textSecondary,
-                  height: 1.4,
                 ),
               ),
               const SizedBox(height: 24),
@@ -817,23 +669,9 @@ class _SurveyPageState extends State<SurveyPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _SurveyTheme.primary,
                   foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
                 ),
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: Text(
-                  'Coba Lagi',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Coba Lagi'),
               ),
             ],
           ),
@@ -842,74 +680,52 @@ class _SurveyPageState extends State<SurveyPage> {
     );
   }
 
-  /// 7. Modern Empty State Widget
-  Widget _buildEmptyState() {
+  /// 7. Empty State (Bisa untuk Data Kosong atau Hasil Pencarian Kosong)
+  Widget _buildEmptyState({required bool isSearchEmpty}) {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 60),
+          padding: const EdgeInsets.all(40),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 72,
-                height: 72,
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: _SurveyTheme.primary.withValues(alpha: 0.08),
+                  color: _SurveyTheme.primary.withOpacity(0.05),
                   shape: BoxShape.circle,
                 ),
-                child: const Center(
-                  child: Icon(
-                    Icons.assignment_outlined,
-                    color: _SurveyTheme.primary,
-                    size: 36,
-                  ),
+                child: Icon(
+                  isSearchEmpty
+                      ? Icons.search_off_rounded
+                      : Icons.note_add_rounded,
+                  size: 64,
+                  color: _SurveyTheme.primary,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               Text(
-                'Belum Ada Survey',
+                isSearchEmpty
+                    ? 'Pencarian Tidak Ditemukan'
+                    : 'Belum Ada Survey',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 18,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.bold,
                   color: _SurveyTheme.textPrimary,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Belum ada data survey yang tersedia saat ini.',
+                isSearchEmpty
+                    ? 'Coba gunakan kata kunci lain untuk mencari.'
+                    : 'Mulai buat dan kelola survey pertamamu.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w400,
+                  fontSize: 13,
                   color: _SurveyTheme.textSecondary,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: _handleAddSurvey,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _SurveyTheme.primary,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: Text(
-                  'Tambah Survey',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  height: 1.5,
                 ),
               ),
             ],
@@ -919,23 +735,39 @@ class _SurveyPageState extends State<SurveyPage> {
     );
   }
 
-/// 8. Floating Action Button (Tambah Survey)
+  /// 8. Floating Action Button (Gradient)
   Widget _buildFloatingActionButton() {
     return Padding(
-      // Sesuaikan nilai 80.0 dengan tinggi Bottom Navigation Bar Anda
-      padding: const EdgeInsets.only(bottom: 80.0), 
-      child: FloatingActionButton.extended(
-        onPressed: _handleAddSurvey,
-        backgroundColor: _SurveyTheme.primary,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        icon: const Icon(Icons.add_rounded, size: 22),
-        label: Text(
-          'Tambah Survey',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.2,
+      padding: const EdgeInsets.only(
+        bottom: 80.0,
+      ), // Sesuaikan dengan navbar bawah jika ada
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [_SurveyTheme.primary, _SurveyTheme.secondary],
+          ),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: _SurveyTheme.primary.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: _handleAddSurvey,
+          backgroundColor:
+              Colors.transparent, // Transparan agar gradient box terlihat
+          elevation: 0,
+          icon: const Icon(Icons.add_rounded, size: 22, color: Colors.white),
+          label: Text(
+            'Tambah Survey',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
         ),
       ),
