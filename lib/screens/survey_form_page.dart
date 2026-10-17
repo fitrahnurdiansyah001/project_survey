@@ -413,7 +413,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
           isSuccess: true,
         );
 
-        // Perbaikan navigasi kembali setelah berhasil submit
         if (Navigator.canPop(context)) {
           Navigator.pop(context, true);
         } else {
@@ -504,7 +503,10 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
                             children: [
                               _buildTitleField(),
                               const SizedBox(height: 16),
-                              _buildCategoryDropdown(),
+
+                              // FITUR PENCARIAN KATEGORI DI SINI
+                              _buildCategorySearch(),
+
                               const SizedBox(height: 16),
                               _buildDescriptionField(),
                             ],
@@ -540,7 +542,7 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     );
   }
 
-  /// 1. Header Gradient bergaya Dashboard (Tombol Kembali Diperbaiki)
+  /// 1. Header Gradient bergaya Dashboard
   Widget _buildGradientHeader() {
     return Container(
       padding: EdgeInsets.only(
@@ -563,7 +565,6 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
       child: Row(
         children: [
           IconButton(
-            // PERBAIKAN TOMBOL KEMBALI
             onPressed: () {
               if (Navigator.canPop(context)) {
                 Navigator.of(context).pop();
@@ -686,7 +687,10 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
     );
   }
 
-  Widget _buildCategoryDropdown() {
+  /// ========================================================
+  /// FITUR BARU: PENCARIAN KATEGORI (MENGGANTIKAN DROPDOWN)
+  /// ========================================================
+  Widget _buildCategorySearch() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -694,26 +698,152 @@ class _SurveyFormPageState extends State<SurveyFormPage> {
         const SizedBox(height: 8),
         _isLoadingCategories
             ? const Center(child: CircularProgressIndicator())
-            : DropdownButtonFormField<int>(
-                value: _selectedCategoryId,
-                isExpanded: true,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: _SurveyFormTheme.textPrimary,
-                ),
-                decoration: _buildInputDecoration(
-                  hintText: 'Pilih Kategori',
-                  prefixIcon: Icons.category_outlined,
-                ),
-                items: _categories
-                    .map(
-                      (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
-                    )
-                    .toList(),
-                onChanged: (val) => setState(() => _selectedCategoryId = val),
-                validator: (v) =>
-                    (v == null || v == 0) ? 'Kategori wajib dipilih.' : null,
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  return Autocomplete<SurveyCategory>(
+                    // Set nilai awal jika form sedang dalam mode Edit
+                    initialValue: TextEditingValue(
+                      text: _selectedCategoryId != null
+                          ? _categories
+                                .firstWhere(
+                                  (c) => c.id == _selectedCategoryId,
+                                  orElse: () =>
+                                      const SurveyCategory(id: 0, name: ''),
+                                )
+                                .name
+                          : '',
+                    ),
+                    displayStringForOption: (SurveyCategory option) =>
+                        option.name,
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text.isEmpty) {
+                        return _categories; // Tampilkan semua kategori saat kosong
+                      }
+                      // Filter berdasarkan ketikan
+                      return _categories.where(
+                        (category) => category.name.toLowerCase().contains(
+                          textEditingValue.text.toLowerCase(),
+                        ),
+                      );
+                    },
+                    onSelected: (SurveyCategory selection) {
+                      setState(() {
+                        _selectedCategoryId = selection.id;
+                      });
+                      FocusScope.of(context).unfocus(); // Tutup keyboard
+                    },
+                    // Membuat custom textfield yang menyatu dengan tema Form
+                    fieldViewBuilder:
+                        (
+                          context,
+                          textEditingController,
+                          focusNode,
+                          onFieldSubmitted,
+                        ) {
+                          return TextFormField(
+                            controller: textEditingController,
+                            focusNode: focusNode,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _SurveyFormTheme.textPrimary,
+                            ),
+                            decoration:
+                                _buildInputDecoration(
+                                  hintText: 'Cari & pilih kategori...',
+                                  prefixIcon: Icons.search_rounded,
+                                ).copyWith(
+                                  suffixIcon: const Icon(
+                                    Icons.arrow_drop_down_rounded,
+                                    color: _SurveyFormTheme.textSecondary,
+                                    size: 28,
+                                  ),
+                                ),
+                            onChanged: (value) {
+                              // Otomatis mencocokkan ID jika user mengetik manual yang valid
+                              final match = _categories
+                                  .where(
+                                    (c) =>
+                                        c.name.toLowerCase() ==
+                                        value.toLowerCase(),
+                                  )
+                                  .toList();
+                              if (match.isNotEmpty) {
+                                _selectedCategoryId = match.first.id;
+                              } else {
+                                _selectedCategoryId =
+                                    null; // Reset jika tidak valid
+                              }
+                            },
+                            validator: (v) {
+                              if (v == null || v.isEmpty)
+                                return 'Kategori wajib diisi.';
+                              if (_selectedCategoryId == null ||
+                                  _selectedCategoryId == 0) {
+                                return 'Kategori tidak valid. Pilih dari daftar.';
+                              }
+                              return null;
+                            },
+                          );
+                        },
+                    // Desain Box / Pop up untuk hasil pencarian
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 6.0,
+                          borderRadius: BorderRadius.circular(12),
+                          color: _SurveyFormTheme.surface,
+                          child: Container(
+                            width: constraints
+                                .biggest
+                                .width, // Menyesuaikan dengan lebar input
+                            constraints: const BoxConstraints(maxHeight: 220),
+                            clipBehavior: Clip.antiAlias,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _SurveyFormTheme.border,
+                              ),
+                            ),
+                            child: ListView.separated(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              separatorBuilder: (context, index) =>
+                                  const Divider(
+                                    height: 1,
+                                    color: _SurveyFormTheme.border,
+                                  ),
+                              itemBuilder: (BuildContext context, int index) {
+                                final SurveyCategory option = options.elementAt(
+                                  index,
+                                );
+                                return InkWell(
+                                  onTap: () => onSelected(option),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    child: Text(
+                                      option.name,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: _SurveyFormTheme.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
       ],
     );
